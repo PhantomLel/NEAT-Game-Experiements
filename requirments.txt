@@ -1,0 +1,4 @@
+pygame
+neat-python
+numpy
+moviepy
