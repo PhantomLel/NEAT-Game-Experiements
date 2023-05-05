@@ -19,10 +19,15 @@ class Game:
         # place player at the bottom of the screen
         self.player = pg.Rect(0, 0, 20, 20)
         self.player.center = (width / 2, height/2)
-        self.speed = 5# max speed
-        self.range = 235
+        self.speed = 15# max speed
+        self.range = 200
+        self.old_positions = [self.player.center]
 
-        self.target = pg.Rect(random.randint(60, width-60), random.randint(60, height-60), 60, 60)
+        while True:
+            self.target = pg.Rect(random.randint(60, width-60), random.randint(60, height-60), 60, 60)
+            if self.player.colliderect(self.target):
+                continue
+            break
 
         self.frames = 0
 
@@ -36,7 +41,7 @@ class Game:
     def run(self):
         while self.running:
             self.loop()
-            if self.frames == 1000:
+            if self.frames == 200:
                 print(self.genome.fitness)
                 break
 
@@ -100,17 +105,16 @@ class Game:
     def get_input(self):
         # get dx and dy from target to player pythagorean theorem
         dist = math.sqrt((self.player.x - self.target.x)**2 + (self.player.y - self.target.y)**2)
-
         sensed = False
         inps = [dist, self.player.x, self.player.y]
         # the rays allow the player to "see" the target
-        num_rays = 8
+        num_rays = 10
         for i in range(num_rays):
             color = (0, 255, 0)
             angle = 360/num_rays * i
             ray = pg.math.Vector2(1, 0).rotate(angle) * self.range
             # check every point on the ray to see if it collides with the target
-            for j in range(1, self.range, 15):
+            for j in range(1, self.range, 12):
                 point = self.player.center + ray.normalize() * j
                 if self.target.collidepoint(point):
                     color = (255, 0, 0)
@@ -136,36 +140,42 @@ class Game:
         # move right
         elif dec == 3:
             self.player.x += self.speed
-        
-        
-        if not (self.player.x > 0 and self.player.x < self.width and self.player.y > 0 and self.player.y < self.height):
-            self.genome.fitness -= 2.5
-            return
-        else:
-            self.genome.fitness -= 0.1
 
-        # if the player collides with the target, reward it and end sim
+        # if the player collides with the target, reward it 
         if self.player.colliderect(self.target):
-            self.genome.fitness += 3
+            self.genome.fitness += 4.5
             return
+
+        if not (self.player.x > 0 and self.player.x < self.width and self.player.y > 0 and self.player.y < self.height):
+            self.genome.fitness -= 6
+            return
+
+        hit = False
+        for pos in self.old_positions:
+            pg.draw.rect(self.screen, (255, 255, 255), (pos[0], pos[1], 5, 5))
+            if self.player.collidepoint(pos):
+                self.genome.fitness -= 0.05
+                hit = True
+        if not hit:
+            self.genome.fitness += 0.2
+        self.old_positions.append(self.player.center)
 
         # reward based on new distance to target 
         new_dist = math.sqrt((self.player.x - self.target.x)**2 + (self.player.y - self.target.y)**2)
         new_dist = new_dist if new_dist >= 0 else 1
-        if new_dist < dist and sensed:
-            self.genome.fitness += 100/new_dist
-        elif sensed:
-            self.genome.fitness -= abs(dist - new_dist)* 0.7
+
+        if new_dist < dist:
+            if sensed:
+                self.genome.fitness += 0.4
+            else:
+                self.genome.fitness += 0.2
+        else:
+            if sensed:
+                self.genome.fitness -= 1.2
+            else:
+                self.genome.fitness -= 0.5
         
         
-        # # reward based on new distance to target
-        # new_dist = pg.math.Vector2(self.player.center) - pg.math.Vector2(self.target.center)
-        # if new_dist.length() < dist.length():
-        #     self.genome.fitness += 10/new_dist.length()
-        # else:
-        #     self.genome.fitness -= 1
-
-
     def test(self, genome, config, follow_mouse=False) -> list:
         global fps
         fps = 120
