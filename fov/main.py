@@ -23,14 +23,14 @@ def eval_genomes(genomes, config):
         Game(win, width, height).train(genome, config)
 
 def run_neat(config):
-    # p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-9')
+   # p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-9')
     p = neat.Population(config)
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
-    p.add_reporter(neat.Checkpointer(2))
+    p.add_reporter(neat.Checkpointer(10))
 
-    winner = p.run(eval_genomes, 25)
+    winner = p.run(eval_genomes, 20)
     with open("best.pickle", "wb") as f:
         pickle.dump(winner, f)
 

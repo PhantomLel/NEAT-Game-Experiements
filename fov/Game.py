@@ -24,7 +24,7 @@ class Game:
         self.old_positions = [self.player.center]
 
         while True:
-            self.target = pg.Rect(random.randint(60, width-60), random.randint(60, height-60), 60, 60)
+            self.target = pg.Rect(random.randint(60, width-60), random.randint(60, height-60), 70, 70)
             if self.player.colliderect(self.target):
                 continue
             break
@@ -41,7 +41,7 @@ class Game:
     def run(self):
         while self.running:
             self.loop()
-            if self.frames == 200:
+            if self.frames == 325:
                 print(self.genome.fitness)
                 break
 
@@ -59,7 +59,7 @@ class Game:
         # elif self.frames % 200 == 0:
         #     self.target.center = (random.randint(30, self.width-30), random.randint(30, self.height-30))
 
-        # draw target
+        pg.draw.circle(self.screen, (255, 255, 255), self.player.center, self.range, 1)
         pg.draw.rect(self.screen, (255, 255, 255), self.target)
         pg.draw.rect(self.screen, (50, 120, 255), self.player)
 
@@ -107,24 +107,16 @@ class Game:
         dist = math.sqrt((self.player.x - self.target.x)**2 + (self.player.y - self.target.y)**2)
         sensed = False
         inps = [dist, self.player.x, self.player.y]
-        # the rays allow the player to "see" the target
-        num_rays = 10
-        for i in range(num_rays):
-            color = (0, 255, 0)
-            angle = 360/num_rays * i
-            ray = pg.math.Vector2(1, 0).rotate(angle) * self.range
-            # check every point on the ray to see if it collides with the target
-            for j in range(1, self.range, 12):
-                point = self.player.center + ray.normalize() * j
-                if self.target.collidepoint(point):
-                    color = (255, 0, 0)
-                    # append the distance at which the ray collided with the target
-                    inps.append(j/self.range)
-                    sensed = True
-                    break
-            else:
-                inps.append(0)
-            pg.draw.line(self.screen, color, self.player.center, self.player.center + ray, 1)
+        # if the target is within range, give coordinates and indicate that it is sensed
+        if dist < self.range:
+            inps.append(1)
+            inps.append(self.target.x - self.player.x)
+            inps.append(self.target.y - self.player.y)
+            sensed = True
+        else:
+            inps.append(0)
+            inps.append(0)
+            inps.append(0)
         # feed inputs into the neural network
         output = self.net.activate(inps)
         dec = output.index(max(output))
@@ -143,22 +135,26 @@ class Game:
 
         # if the player collides with the target, reward it 
         if self.player.colliderect(self.target):
-            self.genome.fitness += 4.5
+            self.genome.fitness += 4
             return
 
         if not (self.player.x > 0 and self.player.x < self.width and self.player.y > 0 and self.player.y < self.height):
-            self.genome.fitness -= 6
+            self.genome.fitness -= 4
             return
 
+        # discourage the player from staying in the same spot
         hit = False
         for pos in self.old_positions:
             pg.draw.rect(self.screen, (255, 255, 255), (pos[0], pos[1], 5, 5))
             if self.player.collidepoint(pos):
-                self.genome.fitness -= 0.05
+                self.genome.fitness -= 0.13
                 hit = True
         if not hit:
-            self.genome.fitness += 0.2
+            self.genome.fitness += 0.4
         self.old_positions.append(self.player.center)
+        # only keep the last 15 positions
+        if len(self.old_positions) > 15:
+            self.old_positions.pop(0)
 
         # reward based on new distance to target 
         new_dist = math.sqrt((self.player.x - self.target.x)**2 + (self.player.y - self.target.y)**2)
@@ -166,14 +162,14 @@ class Game:
 
         if new_dist < dist:
             if sensed:
-                self.genome.fitness += 0.4
+                self.genome.fitness += 0.9
             else:
                 self.genome.fitness += 0.2
         else:
             if sensed:
                 self.genome.fitness -= 1.2
             else:
-                self.genome.fitness -= 0.5
+                self.genome.fitness -= 0.2
         
         
     def test(self, genome, config, follow_mouse=False) -> list:

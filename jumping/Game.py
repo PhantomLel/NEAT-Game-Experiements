@@ -1,6 +1,7 @@
 import pygame as pg
 import random
 import neat, time
+import math
 
 # simple pygame game that allows user to jump to avoid an obstacle
 
@@ -8,18 +9,29 @@ import neat, time
 pg.init()
 font = pg.font.SysFont(None, 24)
 
-fps = 120
+fps = 60
 
 
 class Obstacle:
     def __init__(self, screen_w, screen_h) -> None:
-        self.height = random.randint(10, round(screen_h/1.7))
+        self.height = random.randint(60, round(screen_h/2))
         self.pos = pg.Rect(0, 0, 20, self.height)
         self.pos.bottomleft = (screen_w, screen_h - 20)
+        self.target = pg.Rect(0, 0, 10, 10)
+        self.target.center = (screen_w + 10, screen_h - self.height - 60)
         self.dodged = False
+        self.hit_target = False
+    
+    def move(self):
+        self.pos.x -= 6
+        self.target.x -= 6
 
     def draw(self, screen):
-        pg.draw.rect(screen, (255, 0, 255), self.pos)
+        color = (255, 255, 255)
+        if self.hit_target:
+            color = (0, 255, 0)
+        pg.draw.rect(screen, (255, 255, 255), self.pos)
+        pg.draw.rect(screen, color, self.target)
 
 
 class Game:
@@ -49,7 +61,7 @@ class Game:
     def run(self):
         while self.running:
             self.loop()
-            if self.frames == 1500:
+            if self.frames >= 1500:
                 print(self.genome.fitness)
                 break
 
@@ -60,28 +72,40 @@ class Game:
         self.run()
         return time.time() - start
 
-    def jump(self):
+    def jump(self, v):
         if self.vy == 0 and self.player.bottom == self.floor.top:
-            self.vy = -13
+            self.vy = -1 * v
 
     def draw(self):
         pg.draw.rect(self.screen, (50, 210, 255), self.player)
+        # write a comment for the thing below
+        if self.player.y < 0:
+            self.genome.fitness -= 2
         # draw floor
         pg.draw.rect(self.screen, (255, 255, 255), self.floor)
         # handle obstacles
         for obstacle in self.obstacles:
-            obstacle.pos.x -= 3
+            obstacle.move()
             obstacle.draw(self.screen)
             if obstacle.pos.right < 0:
                 self.obstacles.remove(obstacle)
             elif self.player.colliderect(obstacle.pos):
-                self.genome.fitness -= 200
+                self.genome.fitness -= 40
                 self.obstacles.remove(obstacle)
             # check if player dodged obstacle
             elif obstacle.pos.right < self.player.left and not obstacle.dodged:
                 self.dodged += 1
                 obstacle.dodged = True
-                self.genome.fitness += 145
+                self.genome.fitness += 50
+            # if the target is hit, add more fitness
+            if self.player.colliderect(obstacle.target) and not obstacle.hit_target:
+                self.genome.fitness += 100
+                obstacle.hit_target = True
+        
+        # draw green line from player to target and player to obstacle
+        for obstacle in self.obstacles:
+            pg.draw.line(self.screen, (0, 255, 0), self.player.center, obstacle.target.center)
+            pg.draw.line(self.screen, (0, 255, 0), self.player.center, (obstacle.pos.left, self.height - 30))
 
         global fps
         # fps may become too much at times to render
@@ -105,10 +129,10 @@ class Game:
                 if event.key == pg.K_ESCAPE:
                     self.running = False
                 if event.key == pg.K_RIGHT:
-                    fps += 50
+                    fps += 1000
                 if event.key == pg.K_LEFT:
                     if fps > 50:
-                        fps -= 50
+                        fps -= 1000
 
         # check for jump
         if self.vy != 0 or self.player.bottom != self.floor.top:
@@ -130,7 +154,7 @@ class Game:
         self.draw()
 
         # updae screen every few frames or if fps is low
-        if self.frames % 150 == 0 or fps < 200:
+        if self.frames % 250 == 0 or fps < 1000:
             pg.display.flip()
 
         if self.record:
@@ -149,16 +173,14 @@ class Game:
                     closest = obstacle
                     dist = obstacle.pos.right - self.player.right
 
-        no_obstacle = 0 if closest is None else 1
-        height = closest.height if closest is not None else -10000
+        height = closest.height if closest is not None else 0
+        targ_dist = math.sqrt((closest.target.x - self.player.x) ** 2 + (closest.target.y - self.player.y) ** 2) if height > 0 else 0
         # input distance to next obstacle
-        output = self.net.activate((dist, no_obstacle, height))
-        # get decision from neural network
-        dec = output.index(max(output))
-        if dec == 1:
-            self.jump()
-            # discourage random jumping
-            self.genome.fitness -= 40
+        output = self.net.activate((dist, height, targ_dist))
+        dec = output[0]
+        if dec >= 5:
+            self.jump(dec)
+            self.genome.fitness += 5
 
     def test(self, genome, config) -> list:
         global fps
